@@ -2,21 +2,19 @@
 
 import asyncio
 import fnmatch
-import os
 from pathlib import Path
 from subprocess import PIPE
+from typing import Callable
 
 from fastmcp import FastMCP
 
 from .parser import MakeTarget, normalize_tool_name, parse_makefile
 
-# Will be initialized by create_server()
-mcp: FastMCP | None = None
-
 
 async def run_make(
     makefile: str,
     target: str,
+    working_dir: str | None = None,
     args: str = "",
     dry_run: bool = False,
     timeout: int = 300,
@@ -26,6 +24,7 @@ async def run_make(
     Args:
         makefile: Path to Makefile
         target: Target to run
+        working_dir: Working directory for command execution
         args: Additional arguments
         dry_run: If True, use make -n
         timeout: Timeout in seconds
@@ -45,9 +44,13 @@ async def run_make(
             *cmd,
             stdout=PIPE,
             stderr=PIPE,
+            cwd=working_dir,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
+        # Kill the process to prevent resource leak
+        proc.kill()
+        await proc.wait()
         return f"Command timed out after {timeout} seconds"
     except Exception as e:
         return f"Failed to execute: {e}"
@@ -83,22 +86,19 @@ def create_server(
         Configured FastMCP server
     """
     # Resolve paths
-    if working_dir:
-        os.chdir(working_dir)
-    
     makefile_path = Path(makefile).resolve()
     if not makefile_path.exists():
         raise FileNotFoundError(f"Makefile not found: {makefile_path}")
 
     # Parse targets
-    targets = parse_makefile(makefile_path)
+    all_targets = parse_makefile(makefile_path)
 
     # Filter targets
     def matches_patterns(name: str, patterns: list[str]) -> bool:
         return any(fnmatch.fnmatch(name, p) for p in patterns)
 
     filtered: list[MakeTarget] = []
-    for t in targets:
+    for t in all_targets:
         if include and not matches_patterns(t.name, include):
             continue
         if exclude and matches_patterns(t.name, exclude):
@@ -109,30 +109,57 @@ def create_server(
     server = FastMCP(
         name="makefile-mcp",
         instructions=f"Makefile tools from {makefile_path.name}. "
-        f"Discovered {len(filtered)} targets.",
+        f"Discovered {len(filtered)} targets. "
+        f"Use the makefile:// resources to inspect the Makefile.",
     )
 
-    # Register each target as a tool
+    # =========================================================================
+    # Resources - Let LLM inspect the Makefile
+    # =========================================================================
+
+    @server.resource(f"makefile://{makefile_path.name}")
+    def get_makefile_contents() -> str:
+        """Get the full contents of the Makefile."""
+        return makefile_path.read_text()
+
+    @server.resource("makefile://targets")
+    def get_target_list() -> str:
+        """Get a summary of all available Make targets."""
+        lines = [f"# Available targets in {makefile_path.name}\n"]
+        for t in filtered:
+            tool_name = normalize_tool_name(t.name, prefix)
+            phony = " [PHONY]" if t.is_phony else ""
+            lines.append(f"- **{tool_name}**: {t.description}{phony}")
+        return "\n".join(lines)
+
+    # =========================================================================
+    # Tools - One per Makefile target
+    # =========================================================================
+
     for target in filtered:
         tool_name = normalize_tool_name(target.name, prefix)
-        
+
         # Create tool function with closure
-        def make_tool_factory(t: MakeTarget) -> callable:
+        def make_tool_factory(t: MakeTarget) -> Callable:
             async def tool_fn(
                 args: str = "",
                 dry_run: bool = False,
             ) -> str:
+                """Run this make target.
+
+                Args:
+                    args: Additional arguments to pass to make (e.g., "VERBOSE=1")
+                    dry_run: If True, show commands without executing (make -n)
+                """
                 return await run_make(
                     str(makefile_path),
                     t.name,
+                    working_dir=working_dir,
                     args=args,
                     dry_run=dry_run,
                     timeout=timeout,
                 )
-            
-            # Set metadata
-            tool_fn.__name__ = tool_name
-            tool_fn.__doc__ = t.description
+
             return tool_fn
 
         # Register the tool
