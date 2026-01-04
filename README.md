@@ -76,6 +76,63 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
+## Working Directory Configuration
+
+The working directory can be configured in three ways (in order of precedence):
+
+### 1. Dynamic Tool (Runtime)
+
+Change the working directory at runtime using the `set_working_directory` tool:
+
+```python
+# From within Claude
+set_working_directory("/path/to/project")
+
+# Clear the setting (use CLI/env/var)
+set_working_directory(None)
+```
+
+This is useful for:
+- Multi-project workflows
+- Testing different Makefiles in one session
+- Dynamic directory switching
+
+### 2. Environment Variable
+
+Set the `MAKEFILE_MCP_CWD` environment variable:
+
+```bash
+# In your shell profile
+export MAKEFILE_MCP_CWD=/path/to/project
+
+# Or per-invocation
+MAKEFILE_MCP_CWD=/path/to/project makefile-mcp
+```
+
+### 3. CLI Argument
+
+Pass `--cwd` when starting the server:
+
+```bash
+makefile-mcp --cwd /path/to/project
+```
+
+### Precedence Chain
+
+When multiple methods are used, the precedence is (highest to lowest):
+
+1. **Tool setting** (set via `set_working_directory()`)
+2. **CLI argument** (`--cwd`)
+3. **Environment variable** (`MAKEFILE_MCP_CWD`)
+4. **None** (current directory at server start)
+
+Example:
+```bash
+export MAKEFILE_MCP_CWD=/env_path      # Lowest
+makefile-mcp --cwd /cli_path           # Middle
+# Later: set_working_directory("/tool_path")  # Highest
+```
+
 ## Makefile Convention
 
 Document your targets with `## comments` (the same convention used by `make help`):
@@ -137,12 +194,30 @@ makefile-mcp --prefix "myproject_"
 
 ## Tool Schema
 
-Each discovered tool accepts optional parameters:
+### Configuration Tools
+
+**set_working_directory**
+Change the working directory at runtime.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | string | Absolute path to working directory, or null to clear |
+
+Returns: Confirmation message with current working directory.
+
+### Makefile Target Tools
+
+Each discovered Makefile target becomes a tool with these parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `args` | string | Additional arguments (e.g., `VERBOSE=1`) |
 | `dry_run` | boolean | Show commands without executing (`make -n`) |
+
+### Resources
+
+- `makefile://Makefile` - Full contents of the Makefile
+- `makefile://targets` - Summary of available targets
 
 ## Security
 
