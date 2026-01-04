@@ -16,20 +16,20 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+dependencies = [
+    "fastmcp>=2.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/democratize-technology/makefile-mcp"
 Repository = "https://github.com/democratize-technology/makefile-mcp"
 Issues = "https://github.com/democratize-technology/makefile-mcp/issues"
 
-dependencies = [
-    "fastmcp>=2.0.0",
-]
-
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "psutil>=7.0.0",
     "ruff>=0.7.0",
     "mypy>=1.8.0",
 ]
