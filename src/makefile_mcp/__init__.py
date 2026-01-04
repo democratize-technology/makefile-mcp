@@ -17,6 +17,7 @@ def main() -> None:
     """CLI entry point."""
     import argparse
     import fnmatch
+    import os
     import sys
 
     parser = argparse.ArgumentParser(
@@ -29,6 +30,9 @@ Examples:
   makefile-mcp --list                   # Preview targets
   makefile-mcp -C /path/to/project      # Specify working directory
   makefile-mcp --exclude "deploy,*-prod" # Block dangerous targets
+
+Environment Variables:
+  MAKEFILE_MCP_CWD                     # Default working directory (overridden by -C)
 """,
     )
     parser.add_argument(
@@ -83,6 +87,9 @@ Examples:
     include = [p.strip() for p in args.include.split(",")] if args.include else None
     exclude = [p.strip() for p in args.exclude.split(",")] if args.exclude else None
 
+    # Resolve working directory: CLI arg overrides environment variable
+    working_dir = args.working_dir or os.environ.get("MAKEFILE_MCP_CWD")
+
     # List mode - show targets without starting server
     if args.list:
         try:
@@ -106,7 +113,7 @@ Examples:
     try:
         server = create_server(
             makefile=args.makefile,
-            working_dir=args.working_dir,
+            working_dir=working_dir,
             include=include,
             exclude=exclude,
             prefix=args.prefix,

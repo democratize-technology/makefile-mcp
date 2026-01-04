@@ -2,6 +2,7 @@
 
 import asyncio
 import fnmatch
+import os
 from pathlib import Path
 from subprocess import PIPE
 from typing import Callable
@@ -9,6 +10,45 @@ from typing import Callable
 from fastmcp import FastMCP
 
 from .parser import MakeTarget, normalize_tool_name, parse_makefile
+
+# Module-level state for dynamic working directory configuration
+# Precedence: tool setting > env var > cli arg > None
+_current_working_dir: str | None = None
+
+
+def set_working_directory(path: str | None) -> str:
+    """Set the working directory for all make commands.
+
+    This setting takes highest precedence in the chain:
+    tool setting > MAKEFILE_MCP_CWD > CLI arg > None
+
+    Args:
+        path: Directory path, or None to clear the setting
+
+    Returns:
+        Confirmation message
+
+    Examples:
+        >>> set_working_directory("/path/to/project")
+        'Working directory set to: /path/to/project'
+        >>> set_working_directory(None)
+        'Working directory cleared'
+    """
+    global _current_working_dir
+    _current_working_dir = path
+
+    if path is None:
+        return "Working directory cleared"
+    return f"Working directory set to: {path}"
+
+
+def get_working_directory() -> str | None:
+    """Get the currently configured working directory.
+
+    Returns:
+        The current working directory path, or None if not set
+    """
+    return _current_working_dir
 
 
 async def run_make(
@@ -24,14 +64,26 @@ async def run_make(
     Args:
         makefile: Path to Makefile
         target: Target to run
-        working_dir: Working directory for command execution
+        working_dir: Working directory for command execution (from create_server)
         args: Additional arguments
         dry_run: If True, use make -n
         timeout: Timeout in seconds
 
     Returns:
         Command output or error message
+
+    Note:
+        Working directory precedence:
+        1. tool setting (set_working_directory) - highest
+        2. working_dir parameter (from create_server, already resolved from CLI/env in __init__.py)
+        3. None (current directory)
+
+        The environment variable MAKEFILE_MCP_CWD is handled in __init__.py
+        and passed through working_dir parameter.
     """
+    # Resolve working directory with precedence chain
+    # Note: working_dir parameter already includes env var resolution from __init__.py
+    resolved_working_dir = _current_working_dir or working_dir
     cmd = ["make", "-f", makefile]
     if dry_run:
         cmd.append("-n")
@@ -44,7 +96,7 @@ async def run_make(
             *cmd,
             stdout=PIPE,
             stderr=PIPE,
-            cwd=working_dir,
+            cwd=resolved_working_dir,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
