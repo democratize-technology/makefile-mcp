@@ -107,11 +107,11 @@ Each auto-discovered tool accepts optional parameters:
 ## Development
 
 ```bash
-git clone https://github.com/democratize-technology-code-reviewer/mcp-server-make
-cd mcp-server-make
+git clone https://github.com/democratize-technology/makefile-mcp
+cd makefile-mcp
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-make test
+pytest tests/
 ```
 
 ## License

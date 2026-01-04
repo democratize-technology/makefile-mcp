@@ -16,6 +16,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/democratize-technology/makefile-mcp"
+Repository = "https://github.com/democratize-technology/makefile-mcp"
+Issues = "https://github.com/democratize-technology/makefile-mcp/issues"
+
 dependencies = [
     "fastmcp>=2.0.0",
 ]
